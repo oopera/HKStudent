@@ -1,5 +1,5 @@
 import { Edges } from "@react-three/drei";
-import { Canvas, useFrame } from "@react-three/fiber";
+import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import {
   forwardRef,
   useEffect,
@@ -10,45 +10,80 @@ import {
 } from "react";
 import * as THREE from "three";
 
-function createTextTexture(text) {
+function getTextColor(bgHex) {
+  try {
+    const color = new THREE.Color(bgHex);
+    // perceived luminance
+    const r = color.r,
+      g = color.g,
+      b = color.b;
+    const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    return luminance > 0.6 ? "#111111" : "#ffffff";
+  } catch {
+    return "#111111";
+  }
+}
+
+function createTextTexture(text, bg = "#ffffff") {
   const size = 512;
   const canvas = document.createElement("canvas");
   canvas.width = size;
   canvas.height = size;
   const ctx = canvas.getContext("2d");
-  ctx.fillStyle = "#ffffff";
-  ctx.fillRect(0, 0, size, size);
-  ctx.fillStyle = "#111111";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
+
   const padding = 40;
   const maxWidth = size - padding * 2;
-  let fontSize = 200;
-  ctx.font = `${fontSize}px Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial`;
-  const width = ctx.measureText(text).width;
-  while (width > maxWidth && fontSize > 24) {
-    fontSize -= 4;
-    ctx.font = `${fontSize}px Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial`;
-  }
-  const words = String(text).split(/\s+/);
-  const lines = [];
-  let current = "";
-  for (let i = 0; i < words.length; i++) {
-    const test = current ? current + " " + words[i] : words[i];
-    if (ctx.measureText(test).width <= maxWidth) current = test;
-    else {
-      if (current) lines.push(current);
-      current = words[i];
+  const maxHeight = size - padding * 2;
+
+  const wrapLines = (context, t, width) => {
+    const words = String(t).split(/\s+/);
+    const out = [];
+    let current = "";
+    for (let i = 0; i < words.length; i++) {
+      const candidate = current ? current + " " + words[i] : words[i];
+      if (context.measureText(candidate).width <= width) current = candidate;
+      else {
+        if (current) out.push(current);
+        current = words[i];
+      }
     }
+    if (current) out.push(current);
+    return out.length ? out : [""];
+  };
+
+  // Find the largest font size that fits both width and height
+  let fontSize = 220;
+  let fittedLines = [String(text)];
+  while (fontSize >= 16) {
+    ctx.font = `${fontSize}px Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial`;
+    const lines = wrapLines(ctx, text, maxWidth);
+    const lineHeight = Math.ceil(fontSize * 1.15);
+    const totalHeight = lines.length * lineHeight;
+    let widest = 0;
+    for (let i = 0; i < lines.length; i++)
+      widest = Math.max(widest, ctx.measureText(lines[i]).width);
+    if (totalHeight <= maxHeight && widest <= maxWidth) {
+      fittedLines = lines;
+      break;
+    }
+    fontSize -= 4;
   }
-  if (current) lines.push(current);
-  const lineHeight = fontSize * 1.2;
-  const totalHeight = lines.length * lineHeight;
+
+  // Draw background and fitted text
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, size, size);
+  ctx.fillStyle = getTextColor(bg);
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.font = `${fontSize}px Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial`;
+  const lineHeight = Math.ceil(fontSize * 1.15);
+  const totalHeight = fittedLines.length * lineHeight;
   let y = size / 2 - totalHeight / 2 + lineHeight / 2;
-  lines.forEach((line) => {
-    ctx.fillText(line, size / 2, y);
+  for (let i = 0; i < fittedLines.length; i++) {
+    ctx.fillText(fittedLines[i], size / 2, y);
     y += lineHeight;
-  });
+  }
+
   const texture = new THREE.CanvasTexture(canvas);
   texture.anisotropy = 8;
   texture.needsUpdate = true;
@@ -67,21 +102,32 @@ const faceNormals = [
   new THREE.Vector3(0, 0, -1),
 ];
 
-function Dice({ texts, onResult }, ref) {
+// Approximate per-face texture "up" vectors in cube local space to correct text orientation
+const faceTextUp = [
+  new THREE.Vector3(0, 1, 0), // +x
+  new THREE.Vector3(0, 1, 0), // -x
+  new THREE.Vector3(0, 0, -1), // +y (top) v points toward -z
+  new THREE.Vector3(0, 0, 1), // -y (bottom) v points toward +z
+  new THREE.Vector3(0, 1, 0), // +z
+  new THREE.Vector3(0, 1, 0), // -z
+];
+
+function Dice({ texts, colors, onResult }, ref) {
   const meshRef = useRef();
   const indicatorRef = useRef();
   const animRef = useRef(null);
+  const { camera } = useThree();
 
   const materials = useMemo(() => {
     const mats = new Array(6);
     for (let slot = 0; slot < 6; slot++) {
       const mi = slotToMaterialIndex[slot];
       mats[mi] = new THREE.MeshBasicMaterial({
-        map: createTextTexture(texts[slot]),
+        map: createTextTexture(texts[slot], colors?.[slot] || "#ffffff"),
       });
     }
     return mats;
-  }, [texts]);
+  }, [texts, colors]);
 
   useEffect(() => {
     return () => {
@@ -120,6 +166,31 @@ function Dice({ texts, onResult }, ref) {
       (Math.PI / 2) * (yawQuarterTurns % 4)
     );
     return yaw.multiply(align);
+  };
+
+  const chooseYawForReadable = (materialIndex) => {
+    // Evaluate 4 yaw options; pick the one whose texture-up projects most vertically upwards on screen
+    let bestTurns = 0;
+    let bestScore = -Infinity;
+    const centerLocal = faceNormals[materialIndex].clone().multiplyScalar(1.0);
+    for (let k = 0; k < 4; k++) {
+      const q = quaternionForTopFace(materialIndex, k);
+      const upLocal = faceTextUp[materialIndex];
+      const centerWorld = centerLocal.clone().applyQuaternion(q);
+      const upWorld = upLocal.clone().applyQuaternion(q).normalize();
+      const p0 = centerWorld.clone();
+      const p1 = centerWorld.clone().add(upWorld.clone().multiplyScalar(0.5));
+      const p0N = p0.clone().project(camera);
+      const p1N = p1.clone().project(camera);
+      const dx = p1N.x - p0N.x;
+      const dy = p1N.y - p0N.y;
+      const score = dy - Math.abs(dx) * 0.25; // prefer upward and less sideways
+      if (score > bestScore) {
+        bestScore = score;
+        bestTurns = k;
+      }
+    }
+    return bestTurns;
   };
 
   useImperativeHandle(
@@ -173,7 +244,7 @@ function Dice({ texts, onResult }, ref) {
       if (anim.phase === 1) {
         // snap phase
         const topMatIdx = getTopMaterialIndex();
-        const yawTurns = Math.floor(Math.random() * 4);
+        const yawTurns = chooseYawForReadable(topMatIdx);
         animRef.current = {
           phase: 2,
           start: performance.now(),
@@ -212,7 +283,7 @@ function Dice({ texts, onResult }, ref) {
 
 const DiceWithRef = forwardRef(Dice);
 
-export default forwardRef(function DiceScene({ texts, onResult }, ref) {
+export default forwardRef(function DiceScene({ texts, colors, onResult }, ref) {
   const [mounted, setMounted] = useState(false);
   useEffect(() => {
     setMounted(true);
@@ -228,7 +299,12 @@ export default forwardRef(function DiceScene({ texts, onResult }, ref) {
       className="w-full h-full"
       camera={{ position: [3.5, 3.0, 3.5], fov: 45 }}>
       <color attach="background" args={["#f3f4f6"]} />
-      <DiceWithRef ref={diceRef} texts={texts} onResult={onResult} />
+      <DiceWithRef
+        ref={diceRef}
+        texts={texts}
+        colors={colors}
+        onResult={onResult}
+      />
     </Canvas>
   );
 });
