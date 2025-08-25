@@ -1,10 +1,8 @@
-import { Transition } from "@/components/transition";
 import { motion } from "motion/react";
 import { Inter_Tight } from "next/font/google";
 import Head from "next/head";
 import { useRouter } from "next/router";
 import { useLayoutEffect, useState } from "react";
-import { Header } from "../components/header";
 import { PointerContext } from "../customtypes/pointer";
 import { ThemeContext } from "../customtypes/theme";
 import { TransitionContext } from "../customtypes/transition";
@@ -49,19 +47,6 @@ export default function App({ Component, pageProps }) {
             <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
             <meta name="description" content="Next Js Starter Template" />
           </Head>
-          <Transition />
-          <Header
-            routes={[
-              {
-                value: "/",
-                label: "Home",
-              },
-              {
-                value: "/about",
-                label: "About",
-              },
-            ]}
-          />
 
           <motion.main
             key={router.pathname}
