@@ -199,12 +199,9 @@ function Dice({ texts, colors, onResult }, ref) {
       roll: () => {
         if (!meshRef.current) return;
         onResult && onResult(null);
-        const spinEndEuler = new THREE.Euler(
-          Math.PI * 2 * (2 + Math.random() * 3),
-          Math.PI * 2 * (2 + Math.random() * 3),
-          Math.PI * 2 * (2 + Math.random() * 3),
-          "XYZ"
-        );
+        // XXX
+
+        // XXX
         animRef.current = {
           phase: 1,
           start: performance.now(),
