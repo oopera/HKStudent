@@ -199,6 +199,8 @@ function Dice({ texts, colors, onResult }, ref) {
       roll: () => {
         if (!meshRef.current) return;
         onResult && onResult(null);
+        // Musterlösung Password: XYZ
+        // HILFE: THREE.Euler https://threejs.org/docs/#api/en/math/Euler
         // XXX
 
         // XXX
