@@ -1,4 +1,3 @@
-import { Edges } from "@react-three/drei";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import {
   forwardRef,
@@ -274,7 +273,10 @@ function Dice({ texts, colors, onResult }, ref) {
         <mesh ref={indicatorRef}>
           <planeGeometry args={[2.04, 2.04]} />
           <meshBasicMaterial color={0x10b981} transparent opacity={0} />
-          <Edges color="#10b981" />
+          <lineSegments>
+            <edgesGeometry args={[new THREE.PlaneGeometry(2.04, 2.04)]} />
+            <lineBasicMaterial color="#10b981" />
+          </lineSegments>
         </mesh>
       </mesh>
     </group>
