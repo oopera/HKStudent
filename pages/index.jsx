@@ -44,18 +44,20 @@ export default function Home() {
       <div className="max-w-5xl mx-auto px-4 grid grid-cols-1 lg:grid-cols-3 gap-6 h-full">
         <div className="col-span-1 space-y-4 py-2">
           <div className="text-xl font-semibold">Dice Slots</div>
-          {faceTexts.map((text, idx) => (
+          {[1, 2, 3, 4, 5, 6].map((_, idx) => (
             <div key={idx} className="space-y-1">
               <label className="text-sm text-muted-foreground">{`Slot ${
                 idx + 1
               }`}</label>
               <div className="flex items-center gap-2 pt-1">
                 <Input
-                  value={text}
+                  value={faceTexts[idx]}
                   onChange={(e) => onChangeFace(idx, e.target.value)}
                   placeholder={`Text for slot ${idx + 1}`}
                 />
                 <input
+                  // FINDET DEN RICHTIGEN TYP UM DEN INPUT ZU VERBESSERN
+                  // https://www.w3schools.com/html/html_form_input_types.asp
                   type="color"
                   value={faceColors[idx]}
                   onChange={(e) => {
@@ -69,7 +71,7 @@ export default function Home() {
             </div>
           ))}
           <Button onClick={rollDice} className="w-full">
-            Cast Dice
+            Würfel Rollen
           </Button>
         </div>
         <div className="col-span-1 lg:col-span-2 rounded-md border bg-background h-full min-h-[420px]">
